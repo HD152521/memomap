@@ -1,56 +1,95 @@
-# Welcome to your Expo app 👋
+# 메모 지도 (memo-map)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+장소마다 나만의 메모(화장실 비번, 단골 카페, 먹은 메뉴…)를 남기는 개인 메모 지도 앱.
 
-## Get started
+- 기획: `~/.claude/PRPs/prds/memo-map.prd.md`
+- 스택: Expo SDK 57 (React Native, expo-router) · Supabase (Postgres + PostGIS, Auth, Edge Functions) · 네이버 지도 · TanStack Query · zod
 
-1. Install dependencies
+## 폴더 구조
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+src/
+  app/                 # expo-router 라우트 (화면만)
+    _layout.tsx        # Provider + 로그인 여부로 (app)/login 분기
+    login.tsx
+    (app)/             # 로그인 후 화면: 지도, 검색, 메모 생성/상세
+  features/<domain>/   # auth, memos, places, map — 로직·컴포넌트·테스트(__tests__)
+  lib/                 # supabase 클라이언트, env 검증, AppError, logger, queryClient
+  ui/                  # 공용 UI(Button, theme 토큰)
+supabase/
+  migrations/          # DB 스키마 (RLS 포함)
+  functions/naver-search/  # 네이버 지역 검색 프록시 (Deno)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 필요한 키
 
-### Other setup steps
+| 어디서 | 무엇 | 넣는 곳 |
+|---|---|---|
+| Supabase → Project Settings → API | Project URL, Publishable key | `.env` |
+| NCP 콘솔 → Maps → Application (Mobile Dynamic Map) | Client ID. iOS bundle id / Android package = `com.yongsik.memomap` 등록 | `.env` (`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`) |
+| NCP 콘솔 → NAVER API HUB → 검색(지역) | API Key ID / API Key | `supabase secrets set` (앱에 넣지 않음) |
+| 카카오 개발자 → 내 애플리케이션 | REST API 키, Client Secret | Supabase → Auth → Providers → Kakao |
+| Apple Developer | Sign in with Apple 활성화된 App ID `com.yongsik.memomap` | Supabase → Auth → Providers → Apple → Client IDs |
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+cp .env.example .env   # 값 채우기
+```
 
-## Learn more
+## Supabase 설정 (최초 1회)
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npx supabase login
+npx supabase link --project-ref <project-ref>
+npx supabase db push                       # migrations 적용
+npx supabase secrets set NAVER_APIHUB_KEY_ID=... NAVER_APIHUB_KEY=...
+npx supabase functions deploy naver-search
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+대시보드에서:
+- **Auth → URL Configuration → Redirect URLs**: `memomap://auth/callback` 추가
+- **Auth → Providers → Kakao**: 활성화, REST API 키 / Client Secret 입력, **Allow users without an email** 켜기 (이메일 동의는 비즈앱 전용)
+- **Auth → Providers → Apple**: 활성화, Client IDs에 `com.yongsik.memomap`
+- 카카오 개발자 콘솔: Redirect URI = `https://<project-ref>.supabase.co/auth/v1/callback`, 동의항목 닉네임·프로필 사진
 
-## Join the community
+## 실행
 
-Join our community of developers creating universal apps.
+네이버 지도·Apple 로그인 네이티브 모듈 때문에 **Expo Go로는 실행되지 않는다.** 개발 빌드가 필요하다.
+Android SDK 없이 EAS 클라우드로 개발용 APK를 만드는 방법:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npx eas-cli@latest login                      # Expo 계정 (무료)
+npx eas-cli@latest init                       # EAS 프로젝트 연결 (app.config.ts에 projectId 추가됨)
+
+# 빌드 시점에 필요한 공개 값 등록 (.env는 EAS로 업로드되지 않는다)
+npx eas-cli@latest env:create --environment development --name EXPO_PUBLIC_SUPABASE_URL --value https://<ref>.supabase.co --visibility plaintext
+npx eas-cli@latest env:create --environment development --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY --value sb_publishable_xxx --visibility plaintext
+npx eas-cli@latest env:create --environment development --name EXPO_PUBLIC_NAVER_MAP_CLIENT_ID --value xxxx --visibility plaintext
+
+npx eas-cli@latest build --profile development --platform android   # 완료되면 QR/링크로 APK 설치
+npx expo start --dev-client                   # PC와 폰이 같은 Wi-Fi. 설치한 앱에서 서버에 접속
+```
+
+- iOS 개발 빌드는 Apple Developer 계정($99/년)과 기기 등록(`eas device:create`)이 필요하다.
+- Android Studio가 있으면 `npm run android`로 로컬 빌드도 가능.
+- `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`가 없으면 EAS 빌드가 일부러 실패한다(회색 지도 방지).
+
+지도가 회색으로만 보이면 NCP Maps 앱에 bundle id/package가 정확히 등록됐는지, Client ID가 맞는지 확인.
+
+## 검증
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run test:coverage
+npm run test:db        # Docker 필요: PostGIS 컨테이너에 마이그레이션 적용 후 RLS·좌표·제약·검색 한도 검증
+```
+
+- 네이버 검색은 사용자당 하루 300회로 제한된다 (`consume_search_quota`, 앱 전체 한도 25,000회 보호).
+
+## 규칙
+
+- 좌표 → DB 변환은 `src/features/memos/geo.ts`의 `toEwktPoint` 한 곳에서만 (PostGIS는 경도가 먼저).
+- DB 접근은 `memoRepository` → 화면은 `useMemos` 계열 훅만 사용.
+- 에러는 `toAppError`로 변환해 `userMessage`를 보여준다. `console.*` 대신 `logger`.
+- 새 테이블은 RLS 필수. 뷰는 `security_invoker = true`.
