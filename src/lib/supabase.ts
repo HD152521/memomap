@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import 'expo-sqlite/localStorage/install';
+import './webCryptoPolyfill';
 
 import { createClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
