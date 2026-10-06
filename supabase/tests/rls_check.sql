@@ -141,3 +141,116 @@ select 'share_revoke_new_token' as check,
 delete from public.memo_groups where name = '맛집';
 select 'group_delete_set_null' as check, count(*) = 0 as ok from public.memos where group_id is not null;
 reset role;
+
+-- ===== Phase 2: 공유 가져오기/되돌리기 SQL 함수 =====
+-- A(1111)가 '계곡' 그룹(메모 2, 사진 1)을 공유, B(2222)가 가져간다.
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+set role authenticated;
+insert into public.memo_groups (name, emoji, color) values ('계곡', '🏞️', '#2E9E5B');
+insert into public.memos (title, location, group_id)
+  select '계곡A', 'SRID=4326;POINT(127.1 37.1)', id from public.memo_groups where name = '계곡';
+insert into public.memos (title, location, group_id)
+  select '계곡B', 'SRID=4326;POINT(127.2 37.2)', id from public.memo_groups where name = '계곡';
+insert into public.memo_photos (memo_id, path, position)
+  select id, '11111111-1111-1111-1111-111111111111/' || id || '/v.jpg', 0 from public.memos where title = '계곡A';
+create temp table t_share as select public.create_group_share((select id from public.memo_groups where name = '계곡')) as token;
+grant select on t_share to authenticated;
+reset role;
+
+-- 16) 남의 그룹으로 공유 행 직접 insert → 거부(소유자 트리거)
+do $$ declare gid uuid; begin
+  select id into gid from public.memo_groups where name = '계곡';
+  perform set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  set local role authenticated;
+  begin
+    insert into public.group_shares (group_id, token) values (gid, repeat('x', 30));
+    raise exception 'FAIL: share row for foreign group';
+  exception when insufficient_privilege then raise notice 'share_owner_trigger ok';
+  end;
+end $$;
+
+-- 17) authenticated 는 import 함수를 직접 못 부른다
+do $$ begin
+  perform set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  set local role authenticated;
+  begin
+    perform public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share));
+    raise exception 'FAIL: authenticated called import function';
+  exception when insufficient_privilege then raise notice 'import_fn_private ok';
+  end;
+end $$;
+
+-- B는 이미 '계곡' 이름의 그룹이 있다 → 복사본은 '계곡 (공유)'
+insert into public.memo_groups (user_id, name, emoji, color) values ('22222222-2222-2222-2222-222222222222', '계곡', '⛰️', '#6B7280');
+
+-- 18) 가져오기 (service role 이 호출)
+create temp table t_import as
+  select public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share)) as r;
+select 'import_created' as check, (r->>'mode') = 'created' and (r->>'group_name') = '계곡 (공유)' and (r->>'memo_count')::int = 2 as ok from t_import;
+select 'import_photos_listed' as check, jsonb_array_length(r->'photos') = 1 as ok from t_import;
+select 'import_memos_owned' as check, count(*) = 2 as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and source_share_id is not null
+    and group_id = (select (r->>'group_id')::uuid from t_import);
+
+-- 19) 자기 공유는 거부
+do $$ begin
+  perform public.import_share_copy('11111111-1111-1111-1111-111111111111', (select token from t_share));
+  raise exception 'FAIL: own share imported';
+exception when others then
+  if sqlerrm not like '%OWN_SHARE%' then raise; end if;
+  raise notice 'own_share ok';
+end $$;
+
+-- B가 복사본 그룹에 직접 메모 추가, 복사된 메모 하나는 다른 그룹(분류 없음)으로 옮김
+insert into public.memos (user_id, title, location, group_id)
+  select '22222222-2222-2222-2222-222222222222', 'B직접', 'SRID=4326;POINT(127 37)', (r->>'group_id')::uuid from t_import;
+update public.memos set group_id = null where user_id = '22222222-2222-2222-2222-222222222222' and title = '계곡B';
+
+-- 20) 다시 가져오기: updated, 원본 메모는 정확히 2개(중복 없음), B직접 메모는 유지
+create temp table t_reimport as
+  select public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share)) as r;
+select 'reimport_updated' as check, (r->>'mode') = 'updated' as ok from t_reimport;
+select 'reimport_no_duplicates' as check, count(*) = 2 as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and title in ('계곡A', '계곡B');
+select 'reimport_keeps_own' as check, count(*) = 1 as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and title = 'B직접';
+
+-- 21) 일일 한도 초과 시 거부되고 롤백(복사본 메모 수 유지)
+do $$ begin
+  perform public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share), 300, 300, 1);
+  raise exception 'FAIL: daily limit not enforced';
+exception when others then
+  if sqlerrm not like '%RATE_LIMITED%' then raise; end if;
+  raise notice 'import_rate_limited ok';
+end $$;
+select 'rate_limit_rolled_back' as check, count(*) = 2 as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and source_share_id is not null;
+
+-- 22) 너무 큰 공유 거부
+do $$ begin
+  perform public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share), 1, 300, 50);
+  raise exception 'FAIL: size cap not enforced';
+exception when others then
+  if sqlerrm not like '%SHARE_TOO_LARGE%' then raise; end if;
+  raise notice 'share_too_large ok';
+end $$;
+
+-- 23) 되돌리기: 공유에서 온 메모만 삭제, B직접은 분류 없음으로 남음
+create temp table t_undo as
+  select public.undo_share_import('22222222-2222-2222-2222-222222222222', (select token from t_share), (select (r->>'group_id')::uuid from t_import)) as r;
+select 'undo_removed_imported' as check, count(*) = 0 as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and source_share_id is not null;
+select 'undo_keeps_own_ungrouped' as check, count(*) = 1 as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and title = 'B직접' and group_id is null;
+
+-- 24) 되돌리기 시간 창이 지나면 거부
+create temp table t_import2 as
+  select public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share)) as r;
+update public.memo_groups set created_at = now() - interval '1 hour' where id = (select (r->>'group_id')::uuid from t_import2);
+do $$ begin
+  perform public.undo_share_import('22222222-2222-2222-2222-222222222222', (select token from t_share), (select (r->>'group_id')::uuid from t_import2));
+  raise exception 'FAIL: late undo accepted';
+exception when others then
+  if sqlerrm not like '%NOTHING_TO_UNDO%' then raise; end if;
+  raise notice 'undo_window ok';
+end $$;

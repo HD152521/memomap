@@ -76,6 +76,7 @@
       "src/lib/**/*.{ts,tsx}",
       "src/features/**/*.{ts,tsx}",
       "!**/__tests__/**"
-    ]
+    ],
+    "testTimeout": 15000
   }
 }

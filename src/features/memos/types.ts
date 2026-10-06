@@ -3,6 +3,7 @@ export type Memo = {
   title: string;
   address: string | null;
   naverPlaceId: string | null;
+  groupId: string | null;
   lat: number;
   lng: number;
   body: string;
@@ -17,6 +18,7 @@ export type MemoRow = {
   title: string;
   address: string | null;
   naver_place_id: string | null;
+  group_id: string | null;
   lat: number;
   lng: number;
   body: string;

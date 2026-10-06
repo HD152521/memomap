@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { GroupPicker } from '@/features/groups/GroupPicker';
+import type { MemoGroup } from '@/features/groups/types';
+import { PhotoPickerRow } from '@/features/photos/PhotoPickerRow';
+import type { LocalPhoto, MemoPhoto, PhotoChanges } from '@/features/photos/types';
 import { toAppError } from '@/lib/appError';
 import { Button } from '@/ui/Button';
 import { colors, fontSize, radius, spacing } from '@/ui/theme';
@@ -11,19 +15,31 @@ type FormValues = { title: string; address: string; body: string };
 type FieldErrors = Partial<Record<keyof FormValues, string>>;
 
 type Props = {
-  initial: { title?: string; address?: string | null; body?: string };
+  initial: { title?: string; address?: string | null; body?: string; groupId?: string | null };
   coord: { lat: number; lng: number };
   naverPlaceId?: string | null;
+  groups?: MemoGroup[];
+  existingPhotos?: MemoPhoto[];
   submitLabel: string;
-  onSubmit: (values: MemoInput) => Promise<void>;
+  /** 메모 값과 사진 변경분. 호출하는 화면이 메모 저장 → 사진 반영 순서로 처리한다. */
+  onSubmit: (values: MemoInput, photos: PhotoChanges) => Promise<void>;
 };
 
-export function MemoForm({ initial, coord, naverPlaceId = null, submitLabel, onSubmit }: Props) {
+const NO_PHOTOS: MemoPhoto[] = [];
+const NO_GROUPS: MemoGroup[] = [];
+
+export function MemoForm({ initial, coord, naverPlaceId = null, groups = NO_GROUPS, existingPhotos = NO_PHOTOS, submitLabel, onSubmit }: Props) {
   const [values, setValues] = useState<FormValues>({
     title: initial.title ?? '',
     address: initial.address ?? '',
     body: initial.body ?? '',
   });
+  // 삭제된 그룹이 초기값이면 분류 없음으로 시작한다.
+  const [groupId, setGroupId] = useState<string | null>(
+    initial.groupId && groups.some((group) => group.id === initial.groupId) ? initial.groupId : null,
+  );
+  const [addedPhotos, setAddedPhotos] = useState<LocalPhoto[]>([]);
+  const [removedPhotos, setRemovedPhotos] = useState<MemoPhoto[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,7 +47,7 @@ export function MemoForm({ initial, coord, naverPlaceId = null, submitLabel, onS
   const setField = (key: keyof FormValues) => (text: string) => setValues((prev) => ({ ...prev, [key]: text }));
 
   const submit = async () => {
-    const parsed = memoInputSchema.safeParse({ ...values, address: values.address, lat: coord.lat, lng: coord.lng, naverPlaceId });
+    const parsed = memoInputSchema.safeParse({ ...values, address: values.address, lat: coord.lat, lng: coord.lng, naverPlaceId, groupId });
     if (!parsed.success) {
       const errors: FieldErrors = {};
       for (const issue of parsed.error.issues) {
@@ -45,7 +61,7 @@ export function MemoForm({ initial, coord, naverPlaceId = null, submitLabel, onS
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      await onSubmit(parsed.data);
+      await onSubmit(parsed.data, { added: addedPhotos, removed: removedPhotos });
     } catch (e) {
       setSubmitError(toAppError(e).userMessage);
     } finally {
@@ -56,6 +72,7 @@ export function MemoForm({ initial, coord, naverPlaceId = null, submitLabel, onS
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={80}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <GroupPicker groups={groups} value={groupId} onChange={setGroupId} />
         <Field label="장소 이름" error={fieldErrors.title}>
           <TextInput value={values.title} onChangeText={setField('title')} placeholder="장소 이름" placeholderTextColor={colors.inkMuted} style={styles.input} accessibilityLabel="장소 이름" />
         </Field>
@@ -74,6 +91,14 @@ export function MemoForm({ initial, coord, naverPlaceId = null, submitLabel, onS
             accessibilityLabel="메모"
           />
         </Field>
+        <PhotoPickerRow
+          existing={existingPhotos}
+          added={addedPhotos}
+          removedIds={new Set(removedPhotos.map((photo) => photo.id))}
+          onAdd={(photos) => setAddedPhotos((prev) => [...prev, ...photos])}
+          onRemoveExisting={(photo) => setRemovedPhotos((prev) => [...prev, photo])}
+          onRemoveAdded={(localId) => setAddedPhotos((prev) => prev.filter((photo) => photo.localId !== localId))}
+        />
         <Text style={styles.coord}>
           📍 {coord.lat.toFixed(5)}, {coord.lng.toFixed(5)}
         </Text>

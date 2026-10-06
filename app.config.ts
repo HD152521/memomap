@@ -72,7 +72,8 @@ const config: ExpoConfig = {
     ],
   ],
   experiments: {
-    typedRoutes: true,
+    // Windows에서 dev 서버의 typed routes 감시가 src/app 밖 파일까지 라우트로 넣어 router.d.ts 를 망가뜨려 끈다.
+    typedRoutes: false,
     reactCompiler: true,
   },
   owner: 'wkdrndydtlr',

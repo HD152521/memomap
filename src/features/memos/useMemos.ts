@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { groupKeys } from '@/features/groups/groupKeys';
 import type { AppError } from '@/lib/appError';
 
 import { memoRepository } from './memoRepository';
@@ -12,8 +13,22 @@ export const memoKeys = {
   detail: (id: string) => ['memos', id] as const,
 };
 
-export function useMemos() {
-  return useQuery<Memo[], AppError>({ queryKey: memoKeys.all, queryFn: memoRepository.listMine });
+/** 'all' = 전체, 'none' = 분류 없음, 그 외 = 그룹 id */
+export type MemoFilter = 'all' | 'none' | string;
+
+export function filterMemos(memos: Memo[], filter: MemoFilter): Memo[] {
+  if (filter === 'all') return memos;
+  if (filter === 'none') return memos.filter((memo) => memo.groupId === null);
+  return memos.filter((memo) => memo.groupId === filter);
+}
+
+// 지도는 메모 전체를 이미 불러오므로 필터는 서버 재요청 없이 캐시에서 고른다.
+export function useMemos(filter: MemoFilter = 'all') {
+  return useQuery<Memo[], AppError, Memo[]>({
+    queryKey: memoKeys.all,
+    queryFn: memoRepository.listMine,
+    select: (memos) => filterMemos(memos, filter),
+  });
 }
 
 export function useMemoDetail(id: string) {
@@ -24,8 +39,10 @@ export function useMemoDetail(id: string) {
 export function useCreateMemo() {
   const queryClient = useQueryClient();
   return useMutation<Memo, AppError, MemoInput>({
-    mutationFn: memoRepository.create,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: memoKeys.all }),
+    mutationFn: (input) => memoRepository.create(input),
+    // 그룹별 메모 수(memos(count))도 바뀐다.
+    onSuccess: () =>
+      Promise.all([queryClient.invalidateQueries({ queryKey: memoKeys.all }), queryClient.invalidateQueries({ queryKey: groupKeys.all })]),
   });
 }
 
@@ -35,7 +52,10 @@ export function useUpdateMemo(id: string) {
     mutationFn: (patch) => memoRepository.update(id, patch),
     onSuccess: (memo) => {
       queryClient.setQueryData(memoKeys.detail(id), memo);
-      return queryClient.invalidateQueries({ queryKey: memoKeys.all, exact: true });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: memoKeys.all, exact: true }),
+        queryClient.invalidateQueries({ queryKey: groupKeys.all }),
+      ]);
     },
   });
 }
@@ -43,10 +63,13 @@ export function useUpdateMemo(id: string) {
 export function useDeleteMemo() {
   const queryClient = useQueryClient();
   return useMutation<void, AppError, string>({
-    mutationFn: memoRepository.remove,
+    mutationFn: (id) => memoRepository.remove(id),
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: memoKeys.detail(id) });
-      return queryClient.invalidateQueries({ queryKey: memoKeys.all, exact: true });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: memoKeys.all, exact: true }),
+        queryClient.invalidateQueries({ queryKey: groupKeys.all }),
+      ]);
     },
   });
 }

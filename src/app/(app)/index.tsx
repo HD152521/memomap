@@ -6,8 +6,10 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { signOut } from '@/features/auth/signOut';
+import { GroupFilterChips } from '@/features/groups/GroupFilterChips';
+import { useGroups } from '@/features/groups/useGroups';
 import { MemoMap, type Coord } from '@/features/map/MemoMap';
-import { useMemos } from '@/features/memos/useMemos';
+import { useMemos, type MemoFilter } from '@/features/memos/useMemos';
 import { toAppError } from '@/lib/appError';
 import { Button } from '@/ui/Button';
 import { colors, fontSize, radius, spacing } from '@/ui/theme';
@@ -16,8 +18,13 @@ const MY_LOCATION_ZOOM = 16;
 
 export default function MapScreen() {
   const mapRef = useRef<NaverMapViewRef>(null);
-  const { data: memos = [], error, refetch } = useMemos();
+  const [filter, setFilter] = useState<MemoFilter>('all');
+  const { data: memos = [], error, refetch } = useMemos(filter);
+  const { data: groups = [] } = useGroups();
+  const groupColors = new Map(groups.map((group) => [group.id, group.color]));
   const [draft, setDraft] = useState<Coord | null>(null);
+  // 그룹 필터 중이면 새 메모의 기본 그룹으로 쓴다. 삭제된 그룹이면 무시.
+  const defaultGroupId = filter !== 'all' && filter !== 'none' && groupColors.has(filter) ? filter : undefined;
 
   const moveToMyLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -44,23 +51,37 @@ export default function MapScreen() {
     ]);
   };
 
+  const openMenu = () => {
+    Alert.alert('메뉴', undefined, [
+      { text: '그룹 관리', onPress: () => router.push('/groups') },
+      { text: '로그아웃', style: 'destructive', onPress: confirmSignOut },
+      { text: '닫기', style: 'cancel' },
+    ]);
+  };
+
   const addMemoAtDraft = () => {
     if (!draft) return;
-    router.push({ pathname: '/memo/new', params: { lat: String(draft.latitude), lng: String(draft.longitude) } });
+    router.push({
+      pathname: '/memo/new',
+      params: { lat: String(draft.latitude), lng: String(draft.longitude), ...(defaultGroupId ? { groupId: defaultGroupId } : {}) },
+    });
     setDraft(null);
   };
 
   return (
     <View style={styles.container}>
-      <MemoMap ref={mapRef} memos={memos} draft={draft} onTapMap={setDraft} onTapMemo={(id) => router.push(`/memo/${id}`)} />
+      <MemoMap ref={mapRef} memos={memos} groupColors={groupColors} draft={draft} onTapMap={setDraft} onTapMemo={(id) => router.push(`/memo/${id}`)} />
 
-      <SafeAreaView edges={['top']} style={styles.topBar} pointerEvents="box-none">
-        <Pressable accessibilityRole="search" onPress={() => router.push('/search')} style={({ pressed }) => [styles.searchBox, pressed && styles.pressed]}>
-          <Text style={styles.searchPlaceholder}>🔍  장소 검색해서 메모하기</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="메뉴" onPress={confirmSignOut} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-          <Text style={styles.iconText}>⋯</Text>
-        </Pressable>
+      <SafeAreaView edges={['top']} style={styles.top} pointerEvents="box-none">
+        <View style={styles.topBar} pointerEvents="box-none">
+          <Pressable accessibilityRole="search" onPress={() => router.push('/search')} style={({ pressed }) => [styles.searchBox, pressed && styles.pressed]}>
+            <Text style={styles.searchPlaceholder}>🔍  장소 검색해서 메모하기</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="메뉴" onPress={openMenu} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+            <Text style={styles.iconText}>⋯</Text>
+          </Pressable>
+        </View>
+        <GroupFilterChips groups={groups} value={filter} onChange={setFilter} />
       </SafeAreaView>
 
       {error && (
@@ -103,13 +124,14 @@ const shadow = {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  topBar: { position: 'absolute', left: 0, right: 0, top: 0, flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  top: { position: 'absolute', left: 0, right: 0, top: 0, gap: spacing.sm },
+  topBar: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   searchBox: { flex: 1, height: 48, borderRadius: radius.lg, backgroundColor: colors.surface, justifyContent: 'center', paddingHorizontal: spacing.lg, ...shadow },
   searchPlaceholder: { color: colors.inkMuted, fontSize: fontSize.body },
   iconButton: { width: 48, height: 48, borderRadius: radius.lg, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow },
   iconText: { fontSize: 22, color: colors.ink },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
-  errorBanner: { position: 'absolute', top: 120, alignSelf: 'center', backgroundColor: colors.danger, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  errorBanner: { position: 'absolute', top: 160, alignSelf: 'center', backgroundColor: colors.danger, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   errorText: { color: colors.surface, fontSize: fontSize.caption + 1, fontWeight: '600' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
   locationButton: { alignSelf: 'flex-end', width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow },

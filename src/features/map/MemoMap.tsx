@@ -2,6 +2,7 @@ import { NaverMapMarkerOverlay, NaverMapView, type NaverMapViewRef } from '@mj-s
 import { forwardRef } from 'react';
 import { StyleSheet } from 'react-native';
 
+import { UNGROUPED_COLOR } from '@/features/groups/groupColors';
 import type { Memo } from '@/features/memos/types';
 import { colors } from '@/ui/theme';
 
@@ -12,12 +13,14 @@ export const DEFAULT_CAMERA = { latitude: 37.5666, longitude: 126.9784, zoom: 14
 
 type Props = {
   memos: Memo[];
+  /** 그룹 id → 마커 색. 없는 그룹·분류 없음은 기본 회색. */
+  groupColors?: ReadonlyMap<string, string>;
   draft: Coord | null;
   onTapMap: (coord: Coord) => void;
   onTapMemo: (id: string) => void;
 };
 
-export const MemoMap = forwardRef<NaverMapViewRef, Props>(function MemoMap({ memos, draft, onTapMap, onTapMemo }, ref) {
+export const MemoMap = forwardRef<NaverMapViewRef, Props>(function MemoMap({ memos, groupColors, draft, onTapMap, onTapMemo }, ref) {
   return (
     <NaverMapView
       ref={ref}
@@ -32,6 +35,7 @@ export const MemoMap = forwardRef<NaverMapViewRef, Props>(function MemoMap({ mem
           latitude={memo.lat}
           longitude={memo.lng}
           caption={{ text: memo.title }}
+          tintColor={(memo.groupId && groupColors?.get(memo.groupId)) || UNGROUPED_COLOR}
           onTap={() => onTapMemo(memo.id)}
         />
       ))}

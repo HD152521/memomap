@@ -9,6 +9,7 @@ const memo = (id: string, lat: number, lng: number): Memo => ({
   title: `메모 ${id}`,
   address: null,
   naverPlaceId: null,
+  groupId: null,
   lat,
   lng,
   body: '',
@@ -43,5 +44,16 @@ describe('MemoMap', () => {
     await fireEvent(screen.getByTestId('naver-map'), 'tapMap', { latitude: 37.5, longitude: 127, x: 0, y: 0 });
 
     expect(onTapMap).toHaveBeenCalledWith({ latitude: 37.5, longitude: 127 });
+  });
+
+  test('colors markers by group and falls back to gray', async () => {
+    const grouped = { ...memo('a', 37.1, 127.1), groupId: 'g1' };
+    const loose = memo('b', 37.2, 127.2);
+    await render(
+      <MemoMap memos={[grouped, loose]} groupColors={new Map([['g1', '#E8553E']])} draft={null} onTapMap={jest.fn()} onTapMemo={jest.fn()} />,
+    );
+
+    expect(screen.getByTestId('marker-37.1-127.1').props.tintColor).toBe('#E8553E');
+    expect(screen.getByTestId('marker-37.2-127.2').props.tintColor).toBe('#9AA1A9');
   });
 });

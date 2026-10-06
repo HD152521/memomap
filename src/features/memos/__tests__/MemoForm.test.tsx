@@ -34,7 +34,31 @@ describe('MemoForm', () => {
       lat: 37.4979,
       lng: 127.0276,
       naverPlaceId: null,
-    });
+      groupId: null,
+    }, { added: [], removed: [] });
+  });
+
+  test('submits the chosen group', async () => {
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    const groupId = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+    const groups = [{ id: groupId, name: '맛집', emoji: '🍜', color: '#E8553E', sourceShareId: null, memoCount: 0 }];
+    await render(<MemoForm initial={{ title: '카페' }} coord={coord} groups={groups} submitLabel="저장" onSubmit={onSubmit} />);
+
+    await fireEvent.press(screen.getByTestId(`group-option-${groupId}`));
+    await fireEvent.press(screen.getByTestId('memo-submit'));
+
+    expect(onSubmit.mock.calls[0][0].groupId).toBe(groupId);
+  });
+
+  test('starts ungrouped when the initial group no longer exists', async () => {
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    await render(
+      <MemoForm initial={{ title: '카페', groupId: '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b' }} coord={coord} groups={[]} submitLabel="저장" onSubmit={onSubmit} />,
+    );
+
+    await fireEvent.press(screen.getByTestId('memo-submit'));
+
+    expect(onSubmit.mock.calls[0][0].groupId).toBeNull();
   });
 
   test('shows the user message when submit fails', async () => {

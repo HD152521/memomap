@@ -1,10 +1,12 @@
 import { AppError } from '@/lib/appError';
 import { supabase } from '@/lib/supabase';
+import { queryBuilder } from '@/test/supabaseMock';
 
 import { memoRepository, toMemo } from '../memoRepository';
 import type { MemoRow } from '../types';
 
-jest.mock('@/lib/supabase', () => ({ supabase: { from: jest.fn() } }));
+const mockStorageRemove = jest.fn();
+jest.mock('@/lib/supabase', () => ({ supabase: { from: jest.fn(), storage: { from: jest.fn(() => ({ remove: mockStorageRemove })) } } }));
 jest.mock('@/lib/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 
 const row: MemoRow = {
@@ -13,6 +15,7 @@ const row: MemoRow = {
   title: '스타벅스 강남점',
   address: '서울 강남구',
   naver_place_id: null,
+  group_id: null,
   lat: 37.4979,
   lng: 127.0276,
   body: '비번 1234',
@@ -20,22 +23,12 @@ const row: MemoRow = {
   updated_at: '2026-10-01T00:00:00Z',
 };
 
-type Result = { data: unknown; error: unknown };
-
-// supabase 쿼리 빌더 체인을 흉내낸다. 어떤 메서드를 불러도 자신을 반환하고, await 하면 result를 준다.
-function queryBuilder(result: Result) {
-  const builder: Record<string, jest.Mock> & { then?: unknown } = {};
-  for (const method of ['select', 'insert', 'update', 'delete', 'eq', 'order', 'returns']) {
-    builder[method] = jest.fn(() => builder);
-  }
-  builder.single = jest.fn(() => Promise.resolve(result));
-  builder.then = (resolve: (r: Result) => unknown) => Promise.resolve(result).then(resolve);
-  return builder;
-}
-
 const fromMock = supabase.from as jest.Mock;
 
-beforeEach(() => fromMock.mockReset());
+beforeEach(() => {
+  fromMock.mockReset();
+  mockStorageRemove.mockReset().mockResolvedValue({ error: null });
+});
 
 describe('toMemo', () => {
   test('maps snake_case row to camelCase memo', () => {
@@ -44,6 +37,7 @@ describe('toMemo', () => {
       title: '스타벅스 강남점',
       address: '서울 강남구',
       naverPlaceId: null,
+      groupId: null,
       lat: 37.4979,
       lng: 127.0276,
       body: '비번 1234',
@@ -119,13 +113,69 @@ describe('memoRepository.listMine', () => {
 });
 
 describe('memoRepository.remove', () => {
-  test('deletes by id', async () => {
-    const builder = queryBuilder({ data: null, error: null });
-    fromMock.mockReturnValueOnce(builder);
+  test('deletes the memo row before removing its photo files', async () => {
+    // Arrange
+    const photoBuilder = queryBuilder({ data: [{ path: 'u1/m1/a.jpg' }, { path: 'u1/m1/b.jpg' }], error: null });
+    const deleteBuilder = queryBuilder({ data: null, error: null });
+    fromMock.mockReturnValueOnce(photoBuilder).mockReturnValueOnce(deleteBuilder);
+
+    // Act
+    await memoRepository.remove('m1');
+
+    // Assert
+    expect(fromMock).toHaveBeenNthCalledWith(1, 'memo_photos');
+    expect(photoBuilder.eq).toHaveBeenCalledWith('memo_id', 'm1');
+    expect(fromMock).toHaveBeenNthCalledWith(2, 'memos');
+    expect(mockStorageRemove).toHaveBeenCalledWith(['u1/m1/a.jpg', 'u1/m1/b.jpg']);
+    expect(deleteBuilder.delete.mock.invocationCallOrder[0]).toBeLessThan(mockStorageRemove.mock.invocationCallOrder[0]);
+    expect(deleteBuilder.delete).toHaveBeenCalled();
+    expect(deleteBuilder.eq).toHaveBeenCalledWith('id', 'm1');
+  });
+
+  test('skips storage when the memo has no photos', async () => {
+    fromMock.mockReturnValueOnce(queryBuilder({ data: [], error: null })).mockReturnValueOnce(queryBuilder({ data: null, error: null }));
 
     await memoRepository.remove('m1');
 
-    expect(builder.delete).toHaveBeenCalled();
-    expect(builder.eq).toHaveBeenCalledWith('id', 'm1');
+    expect(mockStorageRemove).not.toHaveBeenCalled();
+  });
+
+  test('keeps the files when the row delete fails', async () => {
+    fromMock
+      .mockReturnValueOnce(queryBuilder({ data: [{ path: 'u1/m1/a.jpg' }], error: null }))
+      .mockReturnValueOnce(queryBuilder({ data: null, error: { code: '42501', message: 'rls' } }));
+
+    await expect(memoRepository.remove('m1')).rejects.toMatchObject({ code: 'UNKNOWN' });
+    expect(mockStorageRemove).not.toHaveBeenCalled();
+  });
+
+  test('still deletes the memo when photo file removal fails', async () => {
+    mockStorageRemove.mockResolvedValue({ error: new Error('storage down') });
+    const deleteBuilder = queryBuilder({ data: null, error: null });
+    fromMock.mockReturnValueOnce(queryBuilder({ data: [{ path: 'u1/m1/a.jpg' }], error: null })).mockReturnValueOnce(deleteBuilder);
+
+    await memoRepository.remove('m1');
+
+    expect(deleteBuilder.delete).toHaveBeenCalled();
+  });
+});
+
+describe('memoRepository.create with group', () => {
+  test('writes group_id when a group is chosen', async () => {
+    const insertBuilder = queryBuilder({ data: { id: 'm1', created_at: row.created_at, updated_at: row.updated_at }, error: null });
+    fromMock.mockReturnValueOnce(insertBuilder);
+    const groupId = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+
+    const memo = await memoRepository.create({ title: '계곡', address: null, lat: 37, lng: 127, body: '', naverPlaceId: null, groupId });
+
+    expect(insertBuilder.insert.mock.calls[0][0].group_id).toBe(groupId);
+    expect(memo.groupId).toBe(groupId);
+  });
+
+  test('rejects a malformed group id before calling supabase', async () => {
+    await expect(
+      memoRepository.create({ title: '계곡', address: null, lat: 37, lng: 127, body: '', naverPlaceId: null, groupId: 'garbage' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' });
+    expect(fromMock).not.toHaveBeenCalled();
   });
 });

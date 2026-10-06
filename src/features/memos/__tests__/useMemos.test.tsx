@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { memoRepository } from '../memoRepository';
 import type { Memo } from '../types';
-import { memoKeys, useCreateMemo, useDeleteMemo, useMemoDetail, useMemos, useUpdateMemo } from '../useMemos';
+import { filterMemos, memoKeys, useCreateMemo, useDeleteMemo, useMemoDetail, useMemos, useUpdateMemo } from '../useMemos';
 
 jest.mock('../memoRepository', () => ({
   memoRepository: { listMine: jest.fn(), getById: jest.fn(), create: jest.fn(), update: jest.fn(), remove: jest.fn() },
@@ -18,6 +18,7 @@ const memo: Memo = {
   title: '카페',
   address: null,
   naverPlaceId: null,
+  groupId: null,
   lat: 37.5,
   lng: 127,
   body: '',
@@ -97,5 +98,35 @@ describe('useMemos hooks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(client.getQueryData(memoKeys.detail('m1'))).toBeUndefined();
+  });
+});
+
+describe('filterMemos', () => {
+  const grouped = { ...memo, id: 'g', groupId: 'group-1' };
+  const other = { ...memo, id: 'o', groupId: 'group-2' };
+  const loose = { ...memo, id: 'n', groupId: null };
+
+  test('returns everything for all', () => {
+    expect(filterMemos([grouped, other, loose], 'all')).toHaveLength(3);
+  });
+
+  test('returns only ungrouped memos for none', () => {
+    expect(filterMemos([grouped, other, loose], 'none').map((m) => m.id)).toEqual(['n']);
+  });
+
+  test('returns only the chosen group', () => {
+    expect(filterMemos([grouped, other, loose], 'group-1').map((m) => m.id)).toEqual(['g']);
+  });
+});
+
+describe('useMemos with filter', () => {
+  test('filters the cached list without another request', async () => {
+    repo.listMine.mockResolvedValue([{ ...memo, id: 'a', groupId: 'g1' }, { ...memo, id: 'b', groupId: null }]);
+    const { wrapper } = setup();
+
+    const { result } = await renderHook(() => useMemos('g1'), { wrapper });
+
+    await waitFor(() => expect(result.current.data?.map((m) => m.id)).toEqual(['a']));
+    expect(repo.listMine).toHaveBeenCalledTimes(1);
   });
 });

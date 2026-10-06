@@ -10,8 +10,8 @@ jest.mock('@mj-studio/react-native-naver-map', () => {
       return React.createElement(View, { testID: 'naver-map', onTapMap, ...rest }, children);
     },
   );
-  const NaverMapMarkerOverlay = ({ onTap, latitude, longitude }: { onTap?: () => void; latitude: number; longitude: number }) =>
-    React.createElement(Pressable, { testID: `marker-${latitude}-${longitude}`, onPress: onTap });
+  const NaverMapMarkerOverlay = ({ onTap, latitude, longitude, tintColor }: { onTap?: () => void; latitude: number; longitude: number; tintColor?: string }) =>
+    React.createElement(Pressable, { testID: `marker-${latitude}-${longitude}`, onPress: onTap, tintColor });
   return { NaverMapView, NaverMapMarkerOverlay };
 });
 
@@ -30,3 +30,19 @@ jest.mock('expo-web-browser', () => ({
 }));
 
 jest.mock('expo-sqlite/localStorage/install', () => ({}));
+
+jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: jest.fn() }));
+
+jest.mock('expo-image-manipulator', () => {
+  const saveAsync = jest.fn().mockResolvedValue({ uri: 'file:///resized.jpg', width: 1600, height: 1200 });
+  const context = { resize: jest.fn(), renderAsync: jest.fn().mockResolvedValue({ width: 1600, height: 1200, saveAsync }) };
+  return { ImageManipulator: { manipulate: jest.fn(() => context) }, SaveFormat: { JPEG: 'jpeg' } };
+});
+
+jest.mock('expo-crypto', () => ({
+  randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000000'),
+  digestStringAsync: jest.fn().mockResolvedValue('digest'),
+  digest: jest.fn().mockResolvedValue(new ArrayBuffer(32)),
+  getRandomValues: jest.fn((array: Uint8Array) => array),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+}));

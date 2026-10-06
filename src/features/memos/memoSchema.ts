@@ -22,6 +22,8 @@ export const memoInputSchema = z.object({
   lng: z.number().min(-180).max(180),
   body: z.string().max(MEMO_BODY_MAX_LENGTH, `메모는 ${MEMO_BODY_MAX_LENGTH}자 이하로 입력하세요`),
   naverPlaceId: z.string().max(NAVER_PLACE_ID_MAX_LENGTH).nullable(),
+  // 미지정 = 분류 없음. 그룹 소유자 확인은 DB 트리거(memos_group_owner_check)가 한다.
+  groupId: z.uuid('그룹을 다시 골라 주세요').nullable().optional(),
 });
 
 export const memoPatchSchema = memoInputSchema.partial();
