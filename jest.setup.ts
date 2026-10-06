@@ -46,3 +46,11 @@ jest.mock('expo-crypto', () => ({
   getRandomValues: jest.fn((array: Uint8Array) => array),
   CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
 }));
+
+jest.mock('expo-media-library', () => ({
+  requestPermissionsAsync: jest.fn(),
+  Query: jest.fn(),
+  Asset: jest.fn(),
+  AssetField: { CREATION_TIME: 'creationTime', MEDIA_TYPE: 'mediaType' },
+  MediaType: { IMAGE: 'image' },
+}));

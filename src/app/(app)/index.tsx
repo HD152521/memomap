@@ -54,6 +54,7 @@ export default function MapScreen() {
   const openMenu = () => {
     Alert.alert('메뉴', undefined, [
       { text: '그룹 관리', onPress: () => router.push('/groups') },
+      ...(__DEV__ ? [{ text: '[개발] 사진 위치 실험', onPress: () => router.push('/dev/photo-location') }] : []),
       { text: '로그아웃', style: 'destructive', onPress: confirmSignOut },
       { text: '닫기', style: 'cancel' },
     ]);

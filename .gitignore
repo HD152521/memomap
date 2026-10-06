@@ -52,3 +52,6 @@ supabase/functions/.env
 
 # coverage
 coverage/
+
+# shell crash dumps
+*.stackdump

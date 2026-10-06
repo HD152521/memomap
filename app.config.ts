@@ -62,6 +62,16 @@ const config: ExpoConfig = {
       'expo-image-picker',
       { photosPermission: '메모에 사진을 첨부하기 위해 사진 보관함에 접근합니다.', cameraPermission: false, microphonePermission: false },
     ],
+    // [M0 스파이크] 사진 촬영 위치를 읽으려면 보관함 직접 접근 + ACCESS_MEDIA_LOCATION 이 필요한지 실측한다.
+    [
+      'expo-media-library',
+      {
+        photosPermission: '사진의 촬영 위치와 날짜로 추억을 지도에 남기기 위해 사진 보관함에 접근합니다.',
+        savePhotosPermission: false,
+        isAccessMediaLocationEnabled: true,
+        granularPermissions: ['photo'],
+      },
+    ],
     [
       '@mj-studio/react-native-naver-map',
       {
