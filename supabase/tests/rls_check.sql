@@ -54,3 +54,90 @@ end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
 select 'quota_anon_denied' as check, public.consume_search_quota(2) = false as ok; -- auth.uid() null
+
+-- ===== Phase 2: 그룹 / 사진 / 공유 =====
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+insert into public.memo_groups (name, emoji, color) values ('맛집', '🍜', '#E8553E');
+update public.memos set group_id = (select id from public.memo_groups where name = '맛집');
+select 'group_view_column' as check, count(*) = 1 as ok from public.memos_with_coords where group_id is not null;
+
+-- 9) 다른 사용자는 그룹·사진·공유를 볼 수 없다
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+select 'rls_groups' as check, count(*) = 0 as ok from public.memo_groups;
+
+-- 10) 남의 그룹 id를 내 메모에 지정 → 거부
+insert into public.memos (title, location) values ('B메모', 'SRID=4326;POINT(127 37)');
+reset role;
+do $$ declare gid uuid; begin
+  select id into gid from public.memo_groups where name = '맛집';
+  perform set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  set local role authenticated;
+  begin
+    update public.memos set group_id = gid where title = 'B메모';
+    raise exception 'FAIL: foreign group assigned';
+  exception when insufficient_privilege then raise notice 'group_owner_check ok';
+  end;
+end $$;
+
+-- 11) 사진: 소유자 경로, 메모당 5장 제한, 남의 메모 거부
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+set role authenticated;
+insert into public.memo_photos (memo_id, path, position)
+select m.id, '11111111-1111-1111-1111-111111111111/' || m.id || '/' || g || '.jpg', g
+from public.memos m, generate_series(0, 4) g where m.title = '스타벅스 강남점';
+select 'photos_five' as check, count(*) = 5 as ok from public.memo_photos;
+do $$ begin
+  insert into public.memo_photos (memo_id, path, position)
+    select id, '11111111-1111-1111-1111-111111111111/x/extra.jpg', 0 from public.memos where title = '스타벅스 강남점';
+  raise exception 'FAIL: 6th photo accepted';
+exception when check_violation or unique_violation then raise notice 'photos_limit ok';
+end $$;
+do $$ begin
+  insert into public.memo_photos (memo_id, path, position)
+    values ((select id from public.memos where title = '스타벅스 강남점'), 'not-owner/x.jpg', 4);
+  raise exception 'FAIL: bad path accepted';
+exception when insufficient_privilege or check_violation or unique_violation then raise notice 'photo_path_check ok';
+end $$;
+
+-- 12) Storage 정책: 내 폴더만 업로드 가능
+insert into storage.objects (bucket_id, name) values ('memo-photos', '11111111-1111-1111-1111-111111111111/m/a.jpg');
+select 'storage_own_insert' as check, count(*) = 1 as ok from storage.objects;
+do $$ begin
+  insert into storage.objects (bucket_id, name) values ('memo-photos', '22222222-2222-2222-2222-222222222222/m/a.jpg');
+  raise exception 'FAIL: foreign folder upload';
+exception when insufficient_privilege then raise notice 'storage_foreign_insert ok';
+end $$;
+
+-- 13) 공유 링크 생성: 같은 토큰 재사용, 길이 ≥ 24, 남은 볼 수 없음
+select 'share_token_len' as check,
+  char_length(public.create_group_share((select id from public.memo_groups where name = '맛집'))) >= 24 as ok;
+select 'share_token_stable' as check,
+  public.create_group_share((select id from public.memo_groups where name = '맛집'))
+  = public.create_group_share((select id from public.memo_groups where name = '맛집')) as ok;
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+select 'rls_shares' as check, count(*) = 0 as ok from public.group_shares;
+reset role;
+do $$ declare gid uuid; begin
+  select id into gid from public.memo_groups where name = '맛집';
+  perform set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  set local role authenticated;
+  begin
+    perform public.create_group_share(gid);
+    raise exception 'FAIL: share created for foreign group';
+  exception when insufficient_privilege then raise notice 'share_foreign_group ok';
+  end;
+end $$;
+
+-- 14) 링크 끄기 후 새 토큰 발급
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+set role authenticated;
+create temp table t_old as select token from public.group_shares;
+select public.revoke_group_share((select id from public.memo_groups where name = '맛집'));
+select 'share_revoke_new_token' as check,
+  public.create_group_share((select id from public.memo_groups where name = '맛집')) <> (select token from t_old) as ok;
+
+-- 15) 그룹 삭제 → 메모는 분류 없음
+delete from public.memo_groups where name = '맛집';
+select 'group_delete_set_null' as check, count(*) = 0 as ok from public.memos where group_id is not null;
+reset role;

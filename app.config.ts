@@ -57,6 +57,11 @@ const config: ExpoConfig = {
     'expo-sqlite',
     'expo-apple-authentication',
     ['expo-location', { locationWhenInUsePermission: LOCATION_USAGE }],
+    // 갤러리 선택만 사용한다(카메라 권한 요청 안 함).
+    [
+      'expo-image-picker',
+      { photosPermission: '메모에 사진을 첨부하기 위해 사진 보관함에 접근합니다.', cameraPermission: false, microphonePermission: false },
+    ],
     [
       '@mj-studio/react-native-naver-map',
       {

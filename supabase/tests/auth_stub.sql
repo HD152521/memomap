@@ -16,3 +16,25 @@ do $$ begin
 end $$;
 grant usage on schema public, auth, extensions to authenticated;
 grant execute on function auth.uid() to authenticated;
+
+-- Phase 2: pgcrypto(gen_random_bytes)와 Supabase storage 스키마 최소 흉내
+create extension if not exists pgcrypto with schema extensions;
+create schema if not exists storage;
+create table if not exists storage.buckets (
+  id text primary key, name text not null, public boolean default false,
+  file_size_limit bigint, allowed_mime_types text[]
+);
+create table if not exists storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets (id),
+  name text not null,
+  owner uuid default auth.uid()
+);
+create or replace function storage.foldername(name text) returns text[]
+language sql immutable as $$
+  select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
+$$;
+alter table storage.objects enable row level security;
+grant usage on schema storage to authenticated;
+grant select, insert, update, delete on storage.objects to authenticated;
+grant select on storage.buckets to authenticated;
