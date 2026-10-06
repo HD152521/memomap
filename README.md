@@ -43,6 +43,8 @@ npx supabase link --project-ref <project-ref>
 npx supabase db push                       # migrations 적용
 npx supabase secrets set NAVER_APIHUB_KEY_ID=... NAVER_APIHUB_KEY=...
 npx supabase functions deploy naver-search
+npx supabase functions deploy import-share   # 그룹 공유 가져오기(사진 복사 포함)
+npm run check:anon                           # 비로그인 접근이 전부 막혔는지 원격 확인
 ```
 
 대시보드에서:
@@ -85,9 +87,13 @@ npm run test:coverage
 npm run test:db        # Docker 필요: PostGIS 컨테이너에 마이그레이션 적용 후 RLS·좌표·제약·검색 한도 검증
 ```
 
+- 공유 가져오기는 사용자당 하루 50회, 공유당 메모 300개·사진 300장 상한. 행 작업은 SQL 함수 `import_share_copy`(단일 트랜잭션), 사진 파일 복사만 Edge Function.
 - 네이버 검색은 사용자당 하루 300회로 제한된다 (`consume_search_quota`, 앱 전체 한도 25,000회 보호).
 
 ## 규칙
+
+- 새 네이티브 모듈(예: expo-image-picker)을 넣으면 개발 빌드를 다시 만들어야 한다(`eas build --profile development --platform android`).
+- typedRoutes는 꺼 두었다: Windows에서 dev 서버 감시가 `.expo/types/router.d.ts`를 잘못 생성한다.
 
 - 좌표 → DB 변환은 `src/features/memos/geo.ts`의 `toEwktPoint` 한 곳에서만 (PostGIS는 경도가 먼저).
 - DB 접근은 `memoRepository` → 화면은 `useMemos` 계열 훅만 사용.

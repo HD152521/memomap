@@ -60,7 +60,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "test:db": "bash supabase/tests/run-local.sh"
+    "test:db": "bash supabase/tests/run-local.sh",
+    "check:anon": "node scripts/check-anon.mjs"
   },
   "private": true,
   "jest": {
