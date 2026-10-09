@@ -1,10 +1,12 @@
 import { NaverMapMarkerOverlay, NaverMapView, type NaverMapViewRef } from '@mj-studio/react-native-naver-map';
 import { forwardRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, useColorScheme } from 'react-native';
 
 import { UNGROUPED_COLOR } from '@/features/groups/groupColors';
 import type { Memo } from '@/features/memos/types';
 import { colors } from '@/ui/theme';
+
+import { mapStyleIdFor } from './mapStyle';
 
 export type Coord = { latitude: number; longitude: number };
 
@@ -21,10 +23,12 @@ type Props = {
 };
 
 export const MemoMap = forwardRef<NaverMapViewRef, Props>(function MemoMap({ memos, groupColors, draft, onTapMap, onTapMemo }, ref) {
+  const scheme = useColorScheme();
   return (
     <NaverMapView
       ref={ref}
       style={StyleSheet.absoluteFill}
+      customStyleId={mapStyleIdFor(scheme)}
       initialCamera={DEFAULT_CAMERA}
       isShowLocationButton={false}
       onTapMap={({ latitude, longitude }) => onTapMap({ latitude, longitude })}
