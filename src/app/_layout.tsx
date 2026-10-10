@@ -36,6 +36,7 @@ function RootNavigator() {
         <Stack.Screen name="login" />
       </Stack.Protected>
       <Stack.Screen name="share/[token]" />
+      <Stack.Screen name="promise/[token]" />
       <Stack.Screen name="auth/callback" />
       <Stack.Screen name="dev/photo-location" />
     </Stack>

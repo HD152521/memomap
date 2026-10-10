@@ -43,6 +43,7 @@ npx supabase db push                       # migrations 적용
 npx supabase secrets set NAVER_APIHUB_KEY_ID=... NAVER_APIHUB_KEY=...
 npx supabase functions deploy naver-search
 npx supabase functions deploy import-share   # 그룹 공유 가져오기(사진 복사 포함)
+npx supabase functions deploy promise-view --no-verify-jwt   # 약속 링크(로그인 없이 토큰으로 조회)
 npm run check:anon                           # 비로그인 접근이 전부 막혔는지 원격 확인
 ```
 
@@ -51,6 +52,12 @@ npm run check:anon                           # 비로그인 접근이 전부 막
 - **Auth → Providers → Kakao**: 활성화, REST API 키 / Client Secret 입력, **Allow users without an email** 켜기 (이메일 동의는 비즈앱 전용)
 - **Auth → Providers → Apple**: 활성화, Client IDs에 `com.yongsik.memomap`
 - 카카오 개발자 콘솔: Redirect URI = `https://<project-ref>.supabase.co/auth/v1/callback`, 동의항목 닉네임·프로필 사진
+
+## 약속 링크 웹 뷰어
+
+받는 사람은 앱 없이 `web/promise/index.html`(정적 페이지)을 연다. 토큰은 URL `#` 뒤에 있어 웹 서버 로그에 남지 않는다.
+앱이 만드는 주소는 `src/features/promise/promiseRepository.ts`의 `PROMISE_WEB_URL`(기본: GitHub Pages `/memomap/p/`).
+이 페이지를 그 주소에 올려야 링크가 열린다. 비번은 약속 마지막 날(한국 시간)까지만 내려가고, 끝나고 30일이 지나면 링크가 만료된다.
 
 ## 실행
 

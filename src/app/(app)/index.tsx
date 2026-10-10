@@ -1,4 +1,3 @@
-import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,35 +7,70 @@ import { signOut } from '@/features/auth/signOut';
 import { GroupFilterChips } from '@/features/groups/GroupFilterChips';
 import { useGroups } from '@/features/groups/useGroups';
 import { MemoMap, type Coord, type MemoMapHandle } from '@/features/map/MemoMap';
+import { useHereLocation } from '@/features/map/useHereLocation';
+import { isInSeason } from '@/features/memos/memoChips';
+import { nearbyMemos } from '@/features/memos/nearby';
+import { NearbyMemos } from '@/features/memos/NearbyMemos';
 import { useMemos, type MemoFilter } from '@/features/memos/useMemos';
 import { toAppError } from '@/lib/appError';
 import { Button } from '@/ui/Button';
 import { colors, fontSize, radius, spacing } from '@/ui/theme';
 
 const MY_LOCATION_ZOOM = 16;
+const LOCATION_DENIED = ['위치 권한이 필요해요', '설정에서 위치 권한을 허용하면 지금 위치에 메모하고, 근처 메모를 볼 수 있어요.'] as const;
 
 export default function MapScreen() {
   const mapRef = useRef<MemoMapHandle>(null);
   const [filter, setFilter] = useState<MemoFilter>('all');
+  const [isShowingOffSeason, setIsShowingOffSeason] = useState(false);
   const { data: memos = [], error, refetch } = useMemos(filter);
   const { data: groups = [] } = useGroups();
+  const { here, locate } = useHereLocation();
   const groupColors = new Map(groups.map((group) => [group.id, group.color]));
   const [draft, setDraft] = useState<Coord | null>(null);
   // 그룹 필터 중이면 새 메모의 기본 그룹으로 쓴다. 삭제된 그룹이면 무시.
   const defaultGroupId = filter !== 'all' && filter !== 'none' && groupColors.has(filter) ? filter : undefined;
 
-  const moveToMyLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('위치 권한이 필요해요', '설정에서 위치 권한을 허용하면 내 위치로 이동할 수 있어요.');
-      return;
-    }
+  // 🗓 시기 칩: 지금 시기가 아닌 메모(여름의 붕어빵 차)는 기본으로 숨긴다.
+  const now = new Date();
+  const inSeason = memos.filter((memo) => isInSeason(memo, now));
+  const hiddenCount = memos.length - inSeason.length;
+  const visibleMemos = isShowingOffSeason ? memos : inSeason;
+  const nearby = here ? nearbyMemos(visibleMemos, here) : [];
+
+  const locateOrExplain = async (): Promise<Coord | null> => {
     try {
-      const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      mapRef.current?.moveTo({ latitude: coords.latitude, longitude: coords.longitude }, MY_LOCATION_ZOOM);
+      const coord = await locate();
+      if (!coord) Alert.alert(...LOCATION_DENIED);
+      return coord;
     } catch (e) {
       Alert.alert('현재 위치를 가져오지 못했어요', toAppError(e).userMessage);
+      return null;
     }
+  };
+
+  const moveToMyLocation = async () => {
+    const coord = await locateOrExplain();
+    if (coord) mapRef.current?.moveTo(coord, MY_LOCATION_ZOOM);
+  };
+
+  const openNewMemo = (coord: Coord) => {
+    router.push({
+      pathname: '/memo/new',
+      params: { lat: String(coord.latitude), lng: String(coord.longitude), ...(defaultGroupId ? { groupId: defaultGroupId } : {}) },
+    });
+  };
+
+  // 3초 기록: 지금 위치에 바로 한 줄.
+  const addMemoHere = async () => {
+    const coord = here ?? (await locateOrExplain());
+    if (coord) openNewMemo(coord);
+  };
+
+  const addMemoAtDraft = () => {
+    if (!draft) return;
+    openNewMemo(draft);
+    setDraft(null);
   };
 
   const confirmSignOut = () => {
@@ -59,18 +93,9 @@ export default function MapScreen() {
     ]);
   };
 
-  const addMemoAtDraft = () => {
-    if (!draft) return;
-    router.push({
-      pathname: '/memo/new',
-      params: { lat: String(draft.latitude), lng: String(draft.longitude), ...(defaultGroupId ? { groupId: defaultGroupId } : {}) },
-    });
-    setDraft(null);
-  };
-
   return (
     <View style={styles.container}>
-      <MemoMap ref={mapRef} memos={memos} groupColors={groupColors} draft={draft} onTapMap={setDraft} onTapMemo={(id) => router.push(`/memo/${id}`)} />
+      <MemoMap ref={mapRef} memos={visibleMemos} groupColors={groupColors} draft={draft} onTapMap={setDraft} onTapMemo={(id) => router.push(`/memo/${id}`)} />
 
       <SafeAreaView edges={['top']} style={styles.top} pointerEvents="box-none">
         <View style={styles.topBar} pointerEvents="box-none">
@@ -82,6 +107,13 @@ export default function MapScreen() {
           </Pressable>
         </View>
         <GroupFilterChips groups={groups} value={filter} onChange={setFilter} />
+        {hiddenCount > 0 && (
+          <Pressable testID="toggle-off-season" accessibilityRole="button" onPress={() => setIsShowingOffSeason((prev) => !prev)} style={styles.seasonPill}>
+            <Text style={styles.seasonPillText}>
+              {isShowingOffSeason ? `🗓 시기 아닌 메모 ${hiddenCount}개도 보는 중 · 숨기기` : `🗓 시기 아닌 메모 ${hiddenCount}개 숨김 · 보기`}
+            </Text>
+          </Pressable>
+        )}
       </SafeAreaView>
 
       {error && (
@@ -96,7 +128,7 @@ export default function MapScreen() {
         </Pressable>
         {draft ? (
           <View style={styles.draftCard}>
-            <Text style={styles.draftTitle}>이 위치에 메모를 남길까요?</Text>
+            <Text style={styles.draftTitle}>이 자리에 메모를 붙일까요?</Text>
             <Text style={styles.draftCoord}>
               {draft.latitude.toFixed(5)}, {draft.longitude.toFixed(5)}
             </Text>
@@ -106,7 +138,13 @@ export default function MapScreen() {
             </View>
           </View>
         ) : (
-          <Text style={styles.hint}>지도를 탭하면 그 위치에 메모를 남길 수 있어요</Text>
+          <>
+            <NearbyMemos items={nearby} onPressMemo={(id) => router.push(`/memo/${id}`)} />
+            <Pressable testID="add-memo-at-my-location" accessibilityRole="button" onPress={addMemoHere} style={({ pressed }) => [styles.fab, pressed && styles.pressed]}>
+              <Text style={styles.fabText}>＋ 여기에 메모</Text>
+            </Pressable>
+            <Text style={styles.hint}>다른 곳은 지도를 탭해서 붙일 수 있어요</Text>
+          </>
         )}
       </SafeAreaView>
     </View>
@@ -131,11 +169,15 @@ const styles = StyleSheet.create({
   iconButton: { width: 48, height: 48, borderRadius: radius.lg, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow },
   iconText: { fontSize: 22, color: colors.ink },
   pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
+  seasonPill: { alignSelf: 'center', backgroundColor: 'rgba(255,253,248,0.94)', borderRadius: radius.lg, paddingVertical: spacing.xs + 1, paddingHorizontal: spacing.md },
+  seasonPillText: { fontSize: fontSize.caption, color: colors.ink },
   errorBanner: { position: 'absolute', top: 160, alignSelf: 'center', backgroundColor: colors.danger, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   errorText: { color: colors.surface, fontSize: fontSize.caption + 1, fontWeight: '600' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.md },
   locationButton: { alignSelf: 'flex-end', width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow },
-  hint: { alignSelf: 'center', color: colors.ink, backgroundColor: 'rgba(255,253,248,0.92)', paddingVertical: spacing.xs + 2, paddingHorizontal: spacing.md, borderRadius: radius.lg, fontSize: fontSize.caption + 1, overflow: 'hidden' },
+  fab: { height: 56, borderRadius: 28, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', ...shadow },
+  fabText: { color: colors.surface, fontSize: fontSize.title, fontWeight: '700' },
+  hint: { alignSelf: 'center', color: colors.inkMuted, fontSize: fontSize.caption },
   draftCard: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.xs, ...shadow },
   draftTitle: { fontSize: fontSize.title, fontWeight: '700', color: colors.ink },
   draftCoord: { fontSize: fontSize.caption, color: colors.inkMuted, fontVariant: ['tabular-nums'] },
