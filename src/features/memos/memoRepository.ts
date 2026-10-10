@@ -23,6 +23,11 @@ export function toMemo(row: MemoRow): Memo {
     lat: row.lat,
     lng: row.lng,
     body: row.body,
+    secretNote: row.secret_note ?? null,
+    visibleMonths: row.visible_months ?? null,
+    visibleWeekdays: row.visible_weekdays ?? null,
+    promiseStart: row.promise_start ?? null,
+    promiseEnd: row.promise_end ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -41,9 +46,27 @@ type WritableColumns = {
   group_id?: string | null;
   body?: string;
   location?: string;
+  secret_note?: string | null;
+  visible_months?: number[] | null;
+  visible_weekdays?: number[] | null;
+  promise_start?: string | null;
+  promise_end?: string | null;
 };
 
-type WritableValues = Partial<{ title: string; address: string | null; naverPlaceId: string | null; groupId: string | null; body: string; lat: number; lng: number }>;
+type WritableValues = Partial<{
+  title: string;
+  address: string | null;
+  naverPlaceId: string | null;
+  groupId: string | null;
+  body: string;
+  lat: number;
+  lng: number;
+  secretNote: string | null;
+  visibleMonths: number[] | null;
+  visibleWeekdays: number[] | null;
+  promiseStart: string | null;
+  promiseEnd: string | null;
+}>;
 
 function toWritableColumns(values: WritableValues): WritableColumns {
   const columns: WritableColumns = {};
@@ -53,6 +76,11 @@ function toWritableColumns(values: WritableValues): WritableColumns {
   if (values.groupId !== undefined) columns.group_id = values.groupId;
   if (values.body !== undefined) columns.body = values.body;
   if (values.lat !== undefined && values.lng !== undefined) columns.location = toEwktPoint(values.lat, values.lng);
+  if (values.secretNote !== undefined) columns.secret_note = values.secretNote;
+  if (values.visibleMonths !== undefined) columns.visible_months = values.visibleMonths;
+  if (values.visibleWeekdays !== undefined) columns.visible_weekdays = values.visibleWeekdays;
+  if (values.promiseStart !== undefined) columns.promise_start = values.promiseStart;
+  if (values.promiseEnd !== undefined) columns.promise_end = values.promiseEnd;
   return columns;
 }
 
@@ -90,6 +118,11 @@ export const memoRepository = {
       lat: values.lat,
       lng: values.lng,
       body: values.body,
+      secretNote: values.secretNote ?? null,
+      visibleMonths: values.visibleMonths ?? null,
+      visibleWeekdays: values.visibleWeekdays ?? null,
+      promiseStart: values.promiseStart ?? null,
+      promiseEnd: values.promiseEnd ?? null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

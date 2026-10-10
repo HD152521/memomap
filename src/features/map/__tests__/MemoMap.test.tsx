@@ -2,21 +2,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react-native
 import { StyleSheet } from 'react-native';
 
 import type { Memo } from '@/features/memos/types';
+import { makeMemo } from '@/test/memoFixture';
 
 import { MemoMap } from '../MemoMap';
 
-const memo = (id: string, lat: number, lng: number): Memo => ({
-  id,
-  title: `메모 ${id}`,
-  address: null,
-  naverPlaceId: null,
-  groupId: null,
-  lat,
-  lng,
-  body: '',
-  createdAt: '2026-10-01T00:00:00Z',
-  updatedAt: '2026-10-01T00:00:00Z',
-});
+const memo = (id: string, lat: number, lng: number): Memo => makeMemo({ id, title: `메모 ${id}`, lat, lng });
 
 const dotColorOf = (markerTestId: string) =>
   StyleSheet.flatten(within(screen.getByTestId(markerTestId)).getByTestId('memo-pin-dot').props.style).backgroundColor;

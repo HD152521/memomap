@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useGroupMap, useGroups } from '@/features/groups/useGroups';
+import { SecretReveal } from '@/features/memos/chips/SecretReveal';
+import { displayTitle, seasonSummary } from '@/features/memos/memoChips';
 import { MemoForm } from '@/features/memos/MemoForm';
 import { firstParam, isUuid } from '@/features/memos/routeParams';
 import { useDeleteMemo, useMemoDetail, useUpdateMemo } from '@/features/memos/useMemos';
 import { PhotoCarousel } from '@/features/photos/PhotoCarousel';
 import { photoRepository } from '@/features/photos/photoRepository';
 import { photoKeys, useMemoPhotos } from '@/features/photos/usePhotos';
+import { PromiseCard } from '@/features/promise/PromiseCard';
 import { Button } from '@/ui/Button';
 import { colors, fontSize, spacing } from '@/ui/theme';
 
@@ -65,6 +68,8 @@ export default function MemoDetailScreen() {
   }
 
   const group = memo.groupId ? groupMap.get(memo.groupId) : undefined;
+  const season = seasonSummary(memo);
+  const title = displayTitle(memo);
 
   const confirmDelete = () => {
     Alert.alert('메모를 삭제할까요?', '삭제한 메모는 되돌릴 수 없어요.', [
@@ -83,16 +88,19 @@ export default function MemoDetailScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: memo.title }} />
+      <Stack.Screen options={{ title }} />
       {group && (
         <Text style={[styles.groupBadge, { backgroundColor: group.color }]}>
           {group.emoji} {group.name}
         </Text>
       )}
-      <Text style={styles.title}>{memo.title}</Text>
+      <Text style={[styles.title, !memo.title.trim() && styles.untitled]}>{title}</Text>
       {memo.address && <Text style={styles.muted}>{memo.address}</Text>}
+      {season && <Text style={styles.season}>🗓 {season}에만 지도에 보여요</Text>}
+      {memo.secretNote && <SecretReveal secret={memo.secretNote} />}
+      <PromiseCard memo={memo} />
       <PhotoCarousel photos={photos} />
-      <Text style={styles.body}>{memo.body || '작성한 메모가 없어요.'}</Text>
+      {memo.body ? <Text style={styles.body}>{memo.body}</Text> : null}
       <Text style={styles.meta}>수정 {DATE_FORMAT.format(new Date(memo.updatedAt))}</Text>
       <View style={styles.actions}>
         {/* 사진 목록이 와야 빈 자리(position)를 바르게 계산할 수 있다. */}
@@ -119,6 +127,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   title: { fontSize: fontSize.hero, fontWeight: '800', color: colors.ink, letterSpacing: -0.3 },
+  untitled: { color: colors.inkMuted },
+  season: { fontSize: fontSize.body, color: colors.ink },
   muted: { color: colors.inkMuted, fontSize: fontSize.body, textAlign: 'left' },
   body: { marginTop: spacing.md, fontSize: fontSize.body + 1, lineHeight: 24, color: colors.ink },
   meta: { marginTop: spacing.lg, fontSize: fontSize.caption, color: colors.inkMuted },

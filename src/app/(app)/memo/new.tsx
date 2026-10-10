@@ -43,6 +43,7 @@ export default function NewMemoScreen() {
       coord={coord}
       groups={groups}
       submitLabel="저장"
+      autoFocus
       onSubmit={async (values, photos) => {
         const memo = await createMemo.mutateAsync(values);
         const { failedUploads } = await photoRepository.applyChanges(memo.id, [], photos);

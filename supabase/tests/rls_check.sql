@@ -25,10 +25,10 @@ do $$ begin
 exception when insufficient_privilege then raise notice 'rls_insert_foreign ok';
 end $$;
 
--- 5) CHECK 제약: 빈 제목 거부
+-- 5) CHECK 제약: 100자 넘는 제목 거부 (v3부터 빈 제목은 허용 — 한 줄 메모)
 do $$ begin
-  insert into public.memos (title, location) values ('', 'SRID=4326;POINT(127 37)');
-  raise exception 'FAIL: empty title accepted';
+  insert into public.memos (title, location) values (repeat('가', 101), 'SRID=4326;POINT(127 37)');
+  raise exception 'FAIL: 101-char title accepted';
 exception when check_violation then raise notice 'check_title ok';
 end $$;
 
@@ -254,3 +254,72 @@ exception when others then
   if sqlerrm not like '%NOTHING_TO_UNDO%' then raise; end if;
   raise notice 'undo_window ok';
 end $$;
+
+-- ===== v3: 메모 칩 (비번 · 시기 · 약속) =====
+-- 25) 그룹 공유 복사본에는 비번이 복사되지 않는다
+reset role;
+update public.memos set secret_note = '현관 1234' where user_id = '11111111-1111-1111-1111-111111111111' and title in ('계곡A', '계곡B');
+create temp table t_import3 as
+  select public.import_share_copy('22222222-2222-2222-2222-222222222222', (select token from t_share)) as r;
+select 'share_copy_no_secret' as check, count(*) > 0 and bool_and(secret_note is null) as ok from public.memos
+  where user_id = '22222222-2222-2222-2222-222222222222' and source_share_id is not null;
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+
+-- 26) 빈 제목(한 줄 메모 없이 핀만) 허용, 뷰에 새 칩 컬럼 노출
+insert into public.memos (location, secret_note, visible_months, visible_weekdays)
+  values ('SRID=4326;POINT(127.01 37.51)', '비번 0000', '{12,1,2}', '{2,4}');
+select 'empty_title_and_chips' as check, count(*) = 1 as ok from public.memos_with_coords
+  where title = '' and secret_note = '비번 0000' and visible_months = '{12,1,2}' and visible_weekdays = '{2,4}';
+
+-- 27) 잘못된 달·요일·약속 기간 거부
+do $$ begin
+  insert into public.memos (location, visible_months) values ('SRID=4326;POINT(127 37)', '{13}');
+  raise exception 'FAIL: month 13 accepted';
+exception when check_violation then raise notice 'check_months ok';
+end $$;
+do $$ begin
+  insert into public.memos (location, visible_weekdays) values ('SRID=4326;POINT(127 37)', '{7}');
+  raise exception 'FAIL: weekday 7 accepted';
+exception when check_violation then raise notice 'check_weekdays ok';
+end $$;
+do $$ begin
+  insert into public.memos (location, promise_start, promise_end) values ('SRID=4326;POINT(127 37)', '2026-11-22', '2026-11-21');
+  raise exception 'FAIL: promise end before start accepted';
+exception when check_violation then raise notice 'check_promise_range ok';
+end $$;
+do $$ begin
+  insert into public.memos (location, promise_end) values ('SRID=4326;POINT(127 37)', '2026-11-21');
+  raise exception 'FAIL: promise end without start accepted';
+exception when check_violation then raise notice 'check_promise_start_required ok';
+end $$;
+
+-- 28) 약속 링크: 날짜 없으면 거부, 있으면 생성·재사용, 남은 못 만듦
+insert into public.memos (title, location) values ('날짜없음', 'SRID=4326;POINT(127 37)');
+do $$ begin
+  perform public.create_promise_share((select id from public.memos where title = '날짜없음'));
+  raise exception 'FAIL: promise share without date';
+exception when others then
+  if sqlerrm not like '%PROMISE_DATE_REQUIRED%' then raise; end if;
+  raise notice 'promise_date_required ok';
+end $$;
+insert into public.memos (title, location, secret_note, promise_start, promise_end)
+  values ('강릉 숙소', 'SRID=4326;POINT(128.9 37.75)', '현관 4321', '2026-11-22', '2026-11-23');
+create temp table t_promise as select public.create_promise_share((select id from public.memos where title = '강릉 숙소')) as token;
+select 'promise_share_reused' as check,
+  public.create_promise_share((select id from public.memos where title = '강릉 숙소')) = (select token from t_promise) as ok;
+
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+do $$ begin
+  perform public.create_promise_share((select id from public.memos m where m.title = '강릉 숙소' limit 1));
+  raise exception 'FAIL: promise share on foreign memo';
+exception when insufficient_privilege then raise notice 'promise_share_foreign ok';
+end $$;
+select 'promise_share_rls' as check, count(*) = 0 as ok from public.memo_promise_shares;
+
+-- 29) 약속 날짜를 지우면 링크가 꺼진다
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+update public.memos set promise_start = null, promise_end = null where title = '강릉 숙소';
+select 'promise_cleared_revokes' as check, count(*) = 1 and bool_and(revoked_at is not null) as ok from public.memo_promise_shares;
+reset role;

@@ -19,6 +19,11 @@ const row: MemoRow = {
   lat: 37.4979,
   lng: 127.0276,
   body: '비번 1234',
+  secret_note: '현관 1234',
+  visible_months: [12, 1, 2],
+  visible_weekdays: null,
+  promise_start: null,
+  promise_end: null,
   created_at: '2026-10-01T00:00:00Z',
   updated_at: '2026-10-01T00:00:00Z',
 };
@@ -41,6 +46,11 @@ describe('toMemo', () => {
       lat: 37.4979,
       lng: 127.0276,
       body: '비번 1234',
+      secretNote: '현관 1234',
+      visibleMonths: [12, 1, 2],
+      visibleWeekdays: null,
+      promiseStart: null,
+      promiseEnd: null,
       createdAt: '2026-10-01T00:00:00Z',
       updatedAt: '2026-10-01T00:00:00Z',
     });
@@ -64,11 +74,11 @@ describe('memoRepository.create', () => {
     const payload = insertBuilder.insert.mock.calls[0][0];
     expect(payload.location).toBe('SRID=4326;POINT(127.0276 37.4979)');
     expect(payload).not.toHaveProperty('user_id');
-    expect(memo).toEqual(toMemo(row));
+    expect(memo).toEqual(toMemo({ ...row, secret_note: null, visible_months: null }));
   });
 
-  test('throws VALIDATION without calling supabase for a blank title', async () => {
-    await expect(memoRepository.create({ ...input, title: ' ' })).rejects.toMatchObject({ code: 'VALIDATION', userMessage: '장소 이름을 입력하세요' });
+  test('throws VALIDATION without calling supabase for a too-long one-line memo', async () => {
+    await expect(memoRepository.create({ ...input, title: '가'.repeat(101) })).rejects.toMatchObject({ code: 'VALIDATION', userMessage: '한 줄 메모는 100자 이하로 입력하세요' });
     expect(fromMock).not.toHaveBeenCalled();
   });
 

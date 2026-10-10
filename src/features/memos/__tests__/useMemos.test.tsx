@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { memoRepository } from '../memoRepository';
+import { makeMemo } from '@/test/memoFixture';
+
 import type { Memo } from '../types';
 import { filterMemos, memoKeys, useCreateMemo, useDeleteMemo, useMemoDetail, useMemos, useUpdateMemo } from '../useMemos';
 
@@ -13,18 +15,7 @@ jest.mock('../memoRepository', () => ({
 const repo = memoRepository as jest.Mocked<typeof memoRepository>;
 const MEMO_UUID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
 
-const memo: Memo = {
-  id: 'm1',
-  title: '카페',
-  address: null,
-  naverPlaceId: null,
-  groupId: null,
-  lat: 37.5,
-  lng: 127,
-  body: '',
-  createdAt: '2026-10-01T00:00:00Z',
-  updatedAt: '2026-10-01T00:00:00Z',
-};
+const memo: Memo = makeMemo();
 
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

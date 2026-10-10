@@ -54,3 +54,5 @@ jest.mock('expo-media-library', () => ({
   AssetField: { CREATION_TIME: 'creationTime', MEDIA_TYPE: 'mediaType' },
   MediaType: { IMAGE: 'image' },
 }));
+
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
