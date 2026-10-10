@@ -3,12 +3,6 @@ import type { ExpoConfig } from 'expo/config';
 const BUNDLE_ID = 'com.yongsik.memomap';
 const LOCATION_USAGE = '내 위치 주변 지도를 보여주기 위해 위치를 사용합니다.';
 
-// 키 없이 빌드하면 지도가 회색으로만 나오고 빌드는 성공해 버린다 → EAS 빌드에서는 즉시 실패시킨다.
-const NAVER_MAP_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID ?? '';
-if (!NAVER_MAP_CLIENT_ID && process.env.EAS_BUILD === 'true') {
-  throw new Error('EXPO_PUBLIC_NAVER_MAP_CLIENT_ID is not set (eas env:create 로 등록하세요)');
-}
-
 const config: ExpoConfig = {
   name: '메모 지도',
   slug: 'memo-map',
@@ -46,14 +40,6 @@ const config: ExpoConfig = {
         imageWidth: 76,
       },
     ],
-    [
-      'expo-build-properties',
-      {
-        android: {
-          extraMavenRepos: ['https://repository.map.naver.com/archive/maven'],
-        },
-      },
-    ],
     'expo-sqlite',
     'expo-apple-authentication',
     ['expo-location', { locationWhenInUsePermission: LOCATION_USAGE }],
@@ -72,14 +58,8 @@ const config: ExpoConfig = {
         granularPermissions: ['photo'],
       },
     ],
-    [
-      '@mj-studio/react-native-naver-map',
-      {
-        client_id: NAVER_MAP_CLIENT_ID,
-        android: { ACCESS_FINE_LOCATION: true, ACCESS_COARSE_LOCATION: true },
-        ios: { NSLocationWhenInUseUsageDescription: LOCATION_USAGE },
-      },
-    ],
+    // 지도: MapLibre + OpenFreeMap(OpenStreetMap) 벡터 타일. API 키 불필요.
+    '@maplibre/maplibre-react-native',
   ],
   experiments: {
     // Windows에서 dev 서버의 typed routes 감시가 src/app 밖 파일까지 라우트로 넣어 router.d.ts 를 망가뜨려 끈다.

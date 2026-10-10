@@ -26,7 +26,6 @@ supabase/
 | 어디서 | 무엇 | 넣는 곳 |
 |---|---|---|
 | Supabase → Project Settings → API | Project URL, Publishable key | `.env` |
-| NCP 콘솔 → Maps → Application (Mobile Dynamic Map) | Client ID. iOS bundle id / Android package = `com.yongsik.memomap` 등록 | `.env` (`EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`) |
 | NCP 콘솔 → NAVER API HUB → 검색(지역) | API Key ID / API Key | `supabase secrets set` (앱에 넣지 않음) |
 | 카카오 개발자 → 내 애플리케이션 | REST API 키, Client Secret | Supabase → Auth → Providers → Kakao |
 | Apple Developer | Sign in with Apple 활성화된 App ID `com.yongsik.memomap` | Supabase → Auth → Providers → Apple → Client IDs |
@@ -55,7 +54,7 @@ npm run check:anon                           # 비로그인 접근이 전부 막
 
 ## 실행
 
-네이버 지도·Apple 로그인 네이티브 모듈 때문에 **Expo Go로는 실행되지 않는다.** 개발 빌드가 필요하다.
+MapLibre 지도·Apple 로그인 네이티브 모듈 때문에 **Expo Go로는 실행되지 않는다.** 개발 빌드가 필요하다.
 Android SDK 없이 EAS 클라우드로 개발용 APK를 만드는 방법:
 
 ```bash
@@ -65,7 +64,6 @@ npx eas-cli@latest init                       # EAS 프로젝트 연결 (app.con
 # 빌드 시점에 필요한 공개 값 등록 (.env는 EAS로 업로드되지 않는다)
 npx eas-cli@latest env:create --environment development --name EXPO_PUBLIC_SUPABASE_URL --value https://<ref>.supabase.co --visibility plaintext
 npx eas-cli@latest env:create --environment development --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY --value sb_publishable_xxx --visibility plaintext
-npx eas-cli@latest env:create --environment development --name EXPO_PUBLIC_NAVER_MAP_CLIENT_ID --value xxxx --visibility plaintext
 
 npx eas-cli@latest build --profile development --platform android   # 완료되면 QR/링크로 APK 설치
 npx expo start --dev-client                   # PC와 폰이 같은 Wi-Fi. 설치한 앱에서 서버에 접속
@@ -73,9 +71,9 @@ npx expo start --dev-client                   # PC와 폰이 같은 Wi-Fi. 설�
 
 - iOS 개발 빌드는 Apple Developer 계정($99/년)과 기기 등록(`eas device:create`)이 필요하다.
 - Android Studio가 있으면 `npm run android`로 로컬 빌드도 가능.
-- `EXPO_PUBLIC_NAVER_MAP_CLIENT_ID`가 없으면 EAS 빌드가 일부러 실패한다(회색 지도 방지).
 
-지도가 회색으로만 보이면 NCP Maps 앱에 bundle id/package가 정확히 등록됐는지, Client ID가 맞는지 확인.
+지도는 MapLibre + OpenFreeMap(OpenStreetMap 데이터) 벡터 타일이라 키가 필요 없다. 색은 `src/features/map/mapStyle.ts`.
+지도 출처 표기(ⓘ, © OpenStreetMap)는 라이선스상 숨기면 안 된다.
 
 ## 검증
 

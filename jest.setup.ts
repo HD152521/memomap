@@ -1,18 +1,18 @@
 process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://test-project.supabase.co';
 process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
 
-jest.mock('@mj-studio/react-native-naver-map', () => {
+jest.mock('@maplibre/maplibre-react-native', () => {
   const React = require('react');
   const { View, Pressable } = require('react-native');
-  const NaverMapView = React.forwardRef(
-    ({ children, onTapMap, ...rest }: { children?: unknown; onTapMap?: unknown }, ref: unknown) => {
-      React.useImperativeHandle(ref, () => ({ animateCameraTo: jest.fn() }));
-      return React.createElement(View, { testID: 'naver-map', onTapMap, ...rest }, children);
-    },
-  );
-  const NaverMapMarkerOverlay = ({ onTap, latitude, longitude, tintColor }: { onTap?: () => void; latitude: number; longitude: number; tintColor?: string }) =>
-    React.createElement(Pressable, { testID: `marker-${latitude}-${longitude}`, onPress: onTap, tintColor });
-  return { NaverMapView, NaverMapMarkerOverlay };
+  const Map = ({ children, testID, onPress, mapStyle }: { children?: unknown; testID?: string; onPress?: unknown; mapStyle?: unknown }) =>
+    React.createElement(View, { testID, onPress, mapStyle }, children);
+  const Camera = React.forwardRef((_props: unknown, ref: unknown) => {
+    React.useImperativeHandle(ref, () => ({ easeTo: jest.fn() }));
+    return null;
+  });
+  const Marker = ({ children, lngLat, onPress }: { children?: unknown; lngLat: [number, number]; onPress?: () => void }) =>
+    React.createElement(Pressable, { testID: `marker-${lngLat[1]}-${lngLat[0]}`, onPress }, children);
+  return { Map, Camera, Marker };
 });
 
 jest.mock('expo-apple-authentication', () => ({

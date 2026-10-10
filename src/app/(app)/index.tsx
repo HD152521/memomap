@@ -1,4 +1,3 @@
-import type { NaverMapViewRef } from '@mj-studio/react-native-naver-map';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -8,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { signOut } from '@/features/auth/signOut';
 import { GroupFilterChips } from '@/features/groups/GroupFilterChips';
 import { useGroups } from '@/features/groups/useGroups';
-import { MemoMap, type Coord } from '@/features/map/MemoMap';
+import { MemoMap, type Coord, type MemoMapHandle } from '@/features/map/MemoMap';
 import { useMemos, type MemoFilter } from '@/features/memos/useMemos';
 import { toAppError } from '@/lib/appError';
 import { Button } from '@/ui/Button';
@@ -17,7 +16,7 @@ import { colors, fontSize, radius, spacing } from '@/ui/theme';
 const MY_LOCATION_ZOOM = 16;
 
 export default function MapScreen() {
-  const mapRef = useRef<NaverMapViewRef>(null);
+  const mapRef = useRef<MemoMapHandle>(null);
   const [filter, setFilter] = useState<MemoFilter>('all');
   const { data: memos = [], error, refetch } = useMemos(filter);
   const { data: groups = [] } = useGroups();
@@ -34,7 +33,7 @@ export default function MapScreen() {
     }
     try {
       const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      mapRef.current?.animateCameraTo({ latitude: coords.latitude, longitude: coords.longitude, zoom: MY_LOCATION_ZOOM });
+      mapRef.current?.moveTo({ latitude: coords.latitude, longitude: coords.longitude }, MY_LOCATION_ZOOM);
     } catch (e) {
       Alert.alert('현재 위치를 가져오지 못했어요', toAppError(e).userMessage);
     }
