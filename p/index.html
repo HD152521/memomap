@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>약속 장소 · 메모리맵</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --bg: #F4F2F7; --card: #FFFFFF; --ink: #26232E; --muted: #6E6A7A; --line: #E4E0EA; --accent: #E07A66;
+    --map-land: #ECEAF1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1B1922; --card: #24212D; --ink: #EEEBF5; --muted: #A39FB0; --line: #34303F; --accent: #E8907D; --map-land: #24212D; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "IBM Plex Sans KR", system-ui, sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: 16px 16px 40px; }
+  .brand { font-family: "Gowun Batang", serif; font-size: 15px; color: var(--muted); margin: 4px 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 12px; }
+  .badge { display: inline-block; background: var(--accent); color: #fff; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 2px 10px; }
+  .badge.ended { background: var(--line); color: var(--muted); }
+  h1 { font-family: "Gowun Batang", serif; font-size: 28px; line-height: 1.25; margin: 10px 0 4px; }
+  .dates { font-size: 17px; font-weight: 700; }
+  .muted { color: var(--muted); font-size: 14px; }
+  #map { height: 260px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 12px; background: var(--map-land); }
+  .label { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+  .secret-btn { width: 100%; min-height: 56px; border: 1px dashed var(--line); background: transparent; color: var(--muted); border-radius: 12px; font: inherit; font-size: 15px; cursor: pointer; }
+  .secret-value { font-size: 34px; font-weight: 800; letter-spacing: 4px; word-break: break-all; font-variant-numeric: tabular-nums; }
+  .secret-value.long { font-size: 18px; letter-spacing: 0; font-weight: 500; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; min-height: 44px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+  .btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .btn:focus-visible, .secret-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .body { white-space: pre-wrap; line-height: 1.6; font-size: 16px; }
+  .state { text-align: center; padding: 64px 16px; }
+  .state h1 { font-size: 22px; }
+  .pin { width: 30px; height: 30px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); background: var(--accent); border: 3px solid #fff; box-shadow: 0 4px 12px rgba(38,35,46,.3); }
+  footer { text-align: center; font-size: 12px; color: var(--muted); margin-top: 20px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">메모리맵 · 약속 메모</div>
+
+  <section id="loading" class="state"><p class="muted">불러오는 중…</p></section>
+
+  <section id="error" class="state" hidden>
+    <h1 id="error-title">열 수 없는 링크예요</h1>
+    <p class="muted" id="error-body">링크가 꺼졌거나 주소가 잘못됐어요. 보낸 사람에게 다시 받아 주세요.</p>
+  </section>
+
+  <section id="content" hidden>
+    <div class="card">
+      <span class="badge" id="phase"></span>
+      <h1 id="title"></h1>
+      <div class="dates" id="dates"></div>
+      <div class="muted" id="address"></div>
+    </div>
+
+    <div id="map" role="img" aria-label="약속 장소 지도"></div>
+
+    <div class="card" id="secret-card" hidden>
+      <div class="label">🔒 비번</div>
+      <button class="secret-btn" id="secret-btn" type="button">탭해서 보기</button>
+      <div id="secret-shown" hidden>
+        <div class="secret-value" id="secret-value"></div>
+        <div class="row"><button class="btn" id="copy-btn" type="button">복사</button></div>
+      </div>
+    </div>
+    <div class="card" id="secret-hidden-card" hidden>
+      <div class="label">🔒 비번</div>
+      <div class="muted">지난 약속이라 비번은 가렸어요.</div>
+    </div>
+
+    <div class="card" id="body-card" hidden>
+      <div class="body" id="body"></div>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="copy-address" type="button" hidden>주소 복사</button>
+      <a class="btn primary" id="open-app" href="#">메모리맵 앱에 저장</a>
+    </div>
+    <footer>내용이 바뀌면 이 링크에도 바로 반영돼요 · 지도 © OpenStreetMap</footer>
+  </section>
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+(function () {
+  'use strict';
+  // 공개 값: Supabase 프로젝트 URL. promise-view 는 로그인 없이(verify_jwt = false) 토큰으로만 조회한다.
+  var VIEW_ENDPOINT = 'https://snzagynwyazkwfywwaff.supabase.co/functions/v1/promise-view';
+  var TOKEN_PATTERN = /^[A-Za-z0-9_-]{24,64}$/;
+  var WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  var DAY_MS = 86400000;
+  var KST_OFFSET_MS = 9 * 3600000;
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function show(id) {
+    ['loading', 'error', 'content'].forEach(function (s) { $(s).hidden = s !== id; });
+  }
+
+  function fail(title, body) {
+    $('error-title').textContent = title;
+    if (body) $('error-body').textContent = body;
+    show('error');
+  }
+
+  function fmt(iso) {
+    var d = new Date(iso + 'T00:00:00Z');
+    return (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + '(' + WEEKDAYS[d.getUTCDay()] + ')';
+  }
+
+  function kstToday() { return new Date(Date.now() + KST_OFFSET_MS).toISOString().slice(0, 10); }
+  function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS); }
+
+  function phaseLabel(start, end) {
+    var today = kstToday();
+    var untilStart = daysBetween(today, start);
+    if (untilStart > 0) return { text: 'D-' + untilStart, ended: false };
+    if (untilStart === 0) return { text: '오늘', ended: false };
+    return daysBetween(today, end || start) >= 0 ? { text: '진행 중', ended: false } : { text: '지난 약속', ended: true };
+  }
+
+  function copy(text, button) {
+    var done = function () { var old = button.textContent; button.textContent = '복사했어요'; setTimeout(function () { button.textContent = old; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+  }
+
+  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var C = dark
+    ? { land: '#24212D', water: '#2A3747', green: '#25312A', building: '#2B2836', road: '#3A3646', roadMajor: '#4A4558', casing: '#1F1C27', label: '#A39FB0' }
+    : { land: '#ECEAF1', water: '#CDDCEA', green: '#DCE8DB', building: '#E2DEEA', road: '#FFFFFF', roadMajor: '#FFFFFF', casing: '#DDD8E6', label: '#8A8597' };
+  var NAME = ['coalesce', ['get', 'name:ko'], ['get', 'name']];
+  var MAJOR = ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary']]];
+  var width = function (b) { return ['interpolate', ['exponential', 1.6], ['zoom'], 12, b * 0.5, 15, b * 2, 18, b * 8]; };
+
+  function mapStyle() {
+    return {
+      version: 8,
+      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      sources: { omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet', attribution: '© OpenStreetMap contributors · OpenFreeMap' } },
+      layers: [
+        { id: 'bg', type: 'background', paint: { 'background-color': C.land } },
+        { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': C.green } },
+        { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': C.water } },
+        { id: 'building', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 14, paint: { 'fill-color': C.building, 'fill-opacity': 0.7 } },
+        { id: 'casing', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: MAJOR, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': C.casing, 'line-width': width(2.4) } },
+        { id: 'minor', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: ['in', ['get', 'class'], ['literal', ['minor', 'service']]], paint: { 'line-color': C.road, 'line-opacity': 0.75, 'line-width': width(0.7) } },
+        { id: 'major', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: MAJOR, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': C.roadMajor, 'line-width': width(1.8) } },
+        { id: 'place', type: 'symbol', source: 'omt', 'source-layer': 'place', filter: ['in', ['get', 'class'], ['literal', ['suburb', 'quarter', 'neighbourhood', 'village', 'town']]],
+          layout: { 'text-field': NAME, 'text-font': ['Noto Sans Regular'], 'text-size': 13 }, paint: { 'text-color': C.label, 'text-halo-color': C.land, 'text-halo-width': 2 } }
+      ]
+    };
+  }
+
+  function render(token, v) {
+    var phase = phaseLabel(v.promiseStart, v.promiseEnd);
+    $('phase').textContent = phase.text;
+    if (phase.ended) $('phase').classList.add('ended');
+    var title = (v.title || '').trim() || '약속 장소';
+    $('title').textContent = title;
+    document.title = title + ' · 메모리맵';
+    $('dates').textContent = v.promiseEnd && v.promiseEnd !== v.promiseStart ? fmt(v.promiseStart) + ' – ' + fmt(v.promiseEnd) : fmt(v.promiseStart);
+    $('address').textContent = v.address || '';
+
+    if (v.secretNote) {
+      $('secret-card').hidden = false;
+      var isLong = v.secretNote.length > 12 || v.secretNote.indexOf('\n') >= 0;
+      $('secret-value').textContent = v.secretNote;
+      if (isLong) $('secret-value').classList.add('long');
+      $('secret-btn').addEventListener('click', function () { $('secret-btn').hidden = true; $('secret-shown').hidden = false; });
+      $('copy-btn').addEventListener('click', function () { copy(v.secretNote, $('copy-btn')); });
+    } else if (v.isSecretHidden) {
+      $('secret-hidden-card').hidden = false;
+    }
+
+    if (v.body && v.body.trim()) {
+      $('body-card').hidden = false;
+      $('body').textContent = v.body;
+    }
+
+    if (v.address) {
+      $('copy-address').hidden = false;
+      $('copy-address').addEventListener('click', function () { copy(v.address, $('copy-address')); });
+    }
+    $('open-app').href = 'memomap://promise/' + token;
+
+    show('content');
+
+    var map = new maplibregl.Map({
+      container: 'map', style: mapStyle(), center: [v.lng, v.lat], zoom: 15.5,
+      attributionControl: { compact: true }, localIdeographFontFamily: "'IBM Plex Sans KR', sans-serif"
+    });
+    // 카드가 막 보이게 된 직후라 컨테이너 크기가 늦게 확정될 수 있다 → 크기 변화를 따라간다.
+    if (window.ResizeObserver) new ResizeObserver(function () { map.resize(); }).observe($('map'));
+    var el = document.createElement('div');
+    el.className = 'pin';
+    new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([v.lng, v.lat]).addTo(map);
+  }
+
+  var token = decodeURIComponent((location.hash || '').slice(1));
+  if (!TOKEN_PATTERN.test(token)) return fail('열 수 없는 링크예요');
+
+  fetch(VIEW_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: token }) })
+    .then(function (res) {
+      if (res.status === 410) throw { title: '지난 약속이에요', body: '약속이 끝난 지 오래돼서 링크가 만료됐어요.' };
+      if (res.status === 404) throw { title: '열 수 없는 링크예요' };
+      if (!res.ok) throw { title: '잠시 후 다시 열어 주세요', body: '서버에 연결하지 못했어요.' };
+      return res.json();
+    })
+    .then(function (v) { render(token, v); })
+    .catch(function (e) { fail(e && e.title ? e.title : '잠시 후 다시 열어 주세요', e && e.body); });
+})();
+</script>
+</body>
+</html>
