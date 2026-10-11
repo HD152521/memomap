@@ -6,8 +6,12 @@ NAME=memo-map-pg-test
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" -e POSTGRES_PASSWORD=pw postgis/postgis:16-3.4 >/dev/null
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
-for _ in $(seq 1 60); do docker exec "$NAME" pg_isready -U postgres >/dev/null 2>&1 && break; sleep 2; done
-sleep 3
+# 이미지 초기화 중에는 임시 서버가 한 번 떴다가 내려간다 → '접속 가능' 로그가 두 번째로 찍힌 뒤(실제 서버)에 시작한다.
+for _ in $(seq 1 90); do
+  [ "$(docker logs "$NAME" 2>&1 | grep -c 'database system is ready to accept connections')" -ge 2 ] && break
+  sleep 2
+done
+docker exec "$NAME" pg_isready -U postgres >/dev/null
 run() { docker exec -i "$NAME" psql -U postgres -v ON_ERROR_STOP=1 -q -t < "$1"; }
 run supabase/tests/auth_stub.sql
 for f in supabase/migrations/*.sql; do run "$f"; done

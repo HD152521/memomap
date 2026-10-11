@@ -318,8 +318,26 @@ exception when insufficient_privilege then raise notice 'promise_share_foreign o
 end $$;
 select 'promise_share_rls' as check, count(*) = 0 as ok from public.memo_promise_shares;
 
--- 29) 약속 날짜를 지우면 링크가 꺼진다
+-- 28-1) 보안: 남의 메모 id 로 직접 INSERT 해서 링크를 만들 수 없다(비번 유출 경로)
+do $$ begin
+  insert into public.memo_promise_shares (memo_id, user_id, token)
+    values ((select id from public.memos m where m.title = '강릉 숙소' limit 1), '22222222-2222-2222-2222-222222222222', repeat('x', 30));
+  raise exception 'FAIL: direct insert of promise share on foreign memo';
+exception when insufficient_privilege then raise notice 'promise_share_direct_insert_blocked ok';
+end $$;
+-- 28-2) 남의 링크를 끌 수도 없다
+select public.revoke_promise_share((select id from public.memos m where m.title = '강릉 숙소' limit 1));
+reset role;
+select 'promise_share_foreign_revoke_noop' as check, count(*) = 1 as ok from public.memo_promise_shares where revoked_at is null;
+set role authenticated;
+
+-- 29) 소유자도 직접 UPDATE 로 링크를 되살리거나 바꿀 수 없다. 약속 날짜를 지우면 링크가 꺼진다
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+do $$ begin
+  update public.memo_promise_shares set token = repeat('y', 30);
+  raise exception 'FAIL: direct update of promise share';
+exception when insufficient_privilege then raise notice 'promise_share_direct_update_blocked ok';
+end $$;
 update public.memos set promise_start = null, promise_end = null where title = '강릉 숙소';
 select 'promise_cleared_revokes' as check, count(*) = 1 and bool_and(revoked_at is not null) as ok from public.memo_promise_shares;
 reset role;
