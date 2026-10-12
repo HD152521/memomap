@@ -11,19 +11,19 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
 <style>
   :root {
-    --bg: #F4F2F7; --card: #FFFFFF; --ink: #26232E; --muted: #6E6A7A; --line: #E4E0EA; --accent: #E07A66;
+    --bg: #F4F2F7; --card: #FFFFFF; --ink: #26232E; --muted: #6A6676; --line: #E4E0EA; --accent: #E07A66; --on-accent: #26232E; --badge-off: #ECE9F1;
     --map-land: #ECEAF1;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #1B1922; --card: #24212D; --ink: #EEEBF5; --muted: #A39FB0; --line: #34303F; --accent: #E8907D; --map-land: #24212D; }
+    :root { --bg: #1B1922; --card: #24212D; --ink: #EEEBF5; --muted: #A39FB0; --line: #34303F; --accent: #E8907D; --on-accent: #1B1922; --badge-off: #2E2A38; --map-land: #24212D; }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "IBM Plex Sans KR", system-ui, sans-serif; }
   main { max-width: 480px; margin: 0 auto; padding: 16px 16px 40px; }
   .brand { font-family: "Gowun Batang", serif; font-size: 15px; color: var(--muted); margin: 4px 0 12px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 12px; }
-  .badge { display: inline-block; background: var(--accent); color: #fff; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 2px 10px; }
-  .badge.ended { background: var(--line); color: var(--muted); }
+  .badge { display: inline-block; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 13px; border-radius: 999px; padding: 2px 10px; }
+  .badge.ended { background: var(--badge-off); color: var(--ink); }
   h1 { font-family: "Gowun Batang", serif; font-size: 28px; line-height: 1.25; margin: 10px 0 4px; }
   .dates { font-size: 17px; font-weight: 700; }
   .muted { color: var(--muted); font-size: 14px; }
